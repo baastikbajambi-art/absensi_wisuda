@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi Undangan Wisuda</title>
+    <!-- Memuat Library Supabase JS -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        :root {
+            --primary: #0B2347;
+            --accent: #D4AF37;
+            --bg: #F4F7FA;
+            --card: #FFFFFF;
+            --text: #1E293B;
+            --success: #16A34A;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); line-height: 1.6; }
+        
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, #163A70 100%);
+            color: white;
+            padding: 35px 20px;
+            text-align: center;
+            border-bottom: 4px solid var(--accent);
+        }
+        header h1 { font-size: 26px; letter-spacing: 1px; margin-bottom: 5px; }
+        header p { font-size: 14px; color: #CBD5E1; }
+
+        /* Container Utama */
+        .container { max-width: 1000px; margin: -25px auto 40px; padding: 0 20px; }
+
+        /* Kartu Statistik */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); text-align: center; border-top: 3px solid var(--primary); }
+        .stat-card h3 { font-size: 28px; color: var(--primary); margin-bottom: 4px; }
+        .stat-card span { font-size: 13px; color: #64748B; font-weight: 600; text-transform: uppercase; }
+
+        /* Panel Check-in */
+        .checkin-box { background: var(--card); padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 25px; }
+        .checkin-box h2 { font-size: 18px; color: var(--primary); margin-bottom: 15px; }
+        .form-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        input[type="text"], select {
+            flex: 1; min-width: 200px; padding: 12px 15px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 15px;
+        }
+        button {
+            background-color: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        button:hover { background-color: #163A70; }
+        .btn-gold { background-color: var(--accent); color: #0B2347; }
+        .btn-gold:hover { background-color: #B8962E; }
+
+        /* Tabel Daftar Tamu */
+        .table-box { background: var(--card); padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #E2E8F0; font-size: 14px; }
+        th { background-color: #F8FAFC; color: var(--primary); font-weight: 700; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-hadir { background-color: #DCFCE7; color: var(--success); }
+        .badge-belum { background-color: #FEE2E2; color: #DC2626; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        
+        /* Notifikasi */
+        #alert-msg { margin-top: 12px; font-size: 14px; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>ABSENSI UNDANGAN WISUDA</h1>
+    <p>Sistem Registrasi Kehadiran Tamu & Wisudawan Real-Time</p>
+</header>
+
+<div class="container">
+    <!-- Statistik -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3 id="total-undangan">0</h3>
+            <span>Total Undangan</span>
+        </div>
+        <div class="stat-card" style="border-top-color: #16A34A;">
+            <h3 id="total-hadir" style="color: #16A34A;">0</h3>
+            <span>Sudah Hadir</span>
+        </div>
+        <div class="stat-card" style="border-top-color: #DC2626;">
+            <h3 id="total-belum" style="color: #DC2626;">0</h3>
+            <span>Belum Hadir</span>
+        </div>
+    </div>
+
+    <!-- Form Check-in Cepat -->
+    <div class="checkin-box">
+        <h2>Registrasi Kehadiran (Check-In)</h2>
+        <div class="form-group">
+            <input type="text" id="input-kode" placeholder="Ketik / Scan Kode Undangan (Misal: WSD-001)...">
+            <button onclick="prosesCheckIn()">Konfirmasi Hadir</button>
+        </div>
+        <div id="alert-msg"></div>
+    </div>
+
+    <!-- Form Tambah Undangan Baru -->
+    <div class="checkin-box">
+        <h2>Tambah Data Undangan Baru</h2>
+        <div class="form-group">
+            <input type="text" id="new-kode" placeholder="Kode Unik (Misal: WSD-005)">
+            <input type="text" id="new-nama" placeholder="Nama Lengkap Tamu / Wisudawan">
+            <select id="new-kategori">
+                <option value="Wisudawan">Wisudawan</option>
+                <option value="Orang Tua / Wali">Orang Tua / Wali</option>
+                <option value="Tamu Undangan / VIP">Tamu Undangan / VIP</option>
+            </select>
+            <button class="btn-gold" onclick="tambahUndangan()">+ Simpan Undangan</button>
+        </div>
+    </div>
+
+    <!-- Daftar Kehadiran -->
+    <div class="table-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <h2 style="font-size: 18px; color: var(--primary);">Daftar Tamu & Status Kehadiran</h2>
+            <input type="text" id="cari-tamu" onkeyup="filterTabel()" placeholder="Cari nama atau kode..." style="max-width: 250px; padding: 8px 12px;">
+        </div>
+        <table id="tabel-tamu">
+            <thead>
+                <tr>
+                    <th>Kode</th>
+                    <th>Nama Lengkap</th>
+                    <th>Kategori</th>
+                    <th>Status</th>
+                    <th>Waktu Hadir</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-tamu">
+                <tr><td colspan="6" style="text-align: center;">Memuat data dari Supabase...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // ==============================================================
+    // GANTI DUA BARIS DI BAWAH INI DENGAN KUNCI API SUPABASE ANDA
+    // ==============================================================
+    const SUPABASE_URL = 'https://rhcrlvwwheqlhvxegrnj.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_BNgPxaQmzdUh1VYjxJoDEg_4x7gtdQA';
+    
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Memuat data saat halaman dibuka
+    document.addEventListener('DOMContentLoaded', muatData);
+
+    async function muatData() {
+        const { data, error } = await supabaseClient
+            .from('absensi_wisuda')
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) {
+            console.error(error);
+            document.getElementById('tbody-tamu').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Gagal terhubung ke Supabase. Pastikan URL & API Key benar.</td></tr>`;
+            return;
+        }
+
+        renderTabel(data);
+        updateStatistik(data);
+    }
+
+    function renderTabel(data) {
+        const tbody = document.getElementById('tbody-tamu');
+        if (data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Belum ada data undangan. Silakan tambahkan di atas.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = data.map(item => {
+            const statusBadge = item.status_hadir 
+                ? `<span class="badge badge-hadir">Hadir</span>` 
+                : `<span class="badge badge-belum">Belum Hadir</span>`;
+            
+            const waktu = item.waktu_hadir 
+                ? new Date(item.waktu_hadir).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+                : '-';
+
+            const tombolAksi = !item.status_hadir
+                ? `<button class="btn-sm" onclick="tandaiHadir('${item.kode_undangan}')">Check-In</button>`
+                : `<span style="color:#16A34A; font-size:12px;">✔ Terverifikasi</span>`;
+
+            return `
+                <tr>
+                    <td><strong>${item.kode_undangan}</strong></td>
+                    <td>${item.nama_lengkap}</td>
+                    <td>${item.kategori}</td>
+                    <td>${statusBadge}</td>
+                    <td>${waktu}</td>
+                    <td>${tombolAksi}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function updateStatistik(data) {
+        const total = data.length;
+        const hadir = data.filter(item => item.status_hadir).length;
+        const belum = total - hadir;
+
+        document.getElementById('total-undangan').innerText = total;
+        document.getElementById('total-hadir').innerText = hadir;
+        document.getElementById('total-belum').innerText = belum;
+    }
+
+    async function prosesCheckIn() {
+        const kode = document.getElementById('input-kode').value.trim().toUpperCase();
+        const alertBox = document.getElementById('alert-msg');
+        
+        if (!kode) {
+            alertBox.style.color = '#DC2626';
+            alertBox.innerText = 'Silakan masukkan kode undangan terlebih dahulu!';
+            return;
+        }
+
+        await tandaiHadir(kode);
+        document.getElementById('input-kode').value = '';
+    }
+
+    async function tandaiHadir(kode) {
+        const alertBox = document.getElementById('alert-msg');
+        
+        // Cek apakah kode ada
+        const { data: cekData } = await supabaseClient
+            .from('absensi_wisuda')
+            .select('*')
+            .eq('kode_undangan', kode)
+		
+		.single();
+if (!cekData) {
+alertBox.style.color = '#DC2626';
+alertBox.innerText = Kode "${kode}" tidak ditemukan dalam daftar undangan!;
+return;
+}
+if (cekData.status_hadir) {
+alertBox.style.color = '#D97706';
+alertBox.innerText = Tamu atas nama ${cekData.nama_lengkap} (${kode}) sudah tercatat hadir sebelumnya.;
+return;
+}
+// Update status hadir
+const { error } = await supabaseClient
+.from('absensi_wisuda')
+.update({ status_hadir: true, waktu_hadir: new Date().toISOString() })
+.eq('kode_undangan', kode);
+if (!error) {
+alertBox.style.color = '#16A34A';
+alertBox.innerText = Berhasil! Selamat datang, ${cekData.nama_lengkap} (${cekData.kategori}).;
+muatData();
+}
+}
+async function tambahUndangan() {
+const kode = document.getElementById('new-kode').value.trim().toUpperCase();
+const nama = document.getElementById('new-nama').value.trim();
+const kategori = document.getElementById('new-kategori').value;
+if (!kode || !nama) {
+alert('Kode Undangan dan Nama Lengkap wajib diisi!');
+return;
+}
+const { error } = await supabaseClient
+.from('absensi_wisuda')
+.insert([{ kode_undangan: kode, nama_lengkap: nama, kategori: kategori, status_hadir: false }]);
+if (error) {
+alert('Gagal menyimpan: Pastikan kode undangan belum pernah dipakai.');
+} else {
+document.getElementById('new-kode').value = '';
+document.getElementById('new-nama').value = '';
+muatData();
+}
+}
+function filterTabel() {
+const keyword = document.getElementById('cari-tamu').value.toLowerCase();
+const baris = document.querySelectorAll('#tbody-tamu tr');
+baris.forEach(tr => {
+const teks = tr.innerText.toLowerCase();
+tr.style.display = teks.includes(keyword) ? '' : 'none';
+});
+}
+
+* **Masukkan Kunci Supabase Anda:** Cari bagian `<script>` di bagian bawah kode (sekitar baris 172), lalu ganti teks `MASUKKAN-URL-PROYEK-ANDA` dan `MASUKKAN-ANON-PUBLIC-KEY-ANDA` dengan kredensial yang sudah Anda salin dari tahap pertama.
+* **Uji Coba di Dreamweaver:** Tekan **`Ctrl + S`**, lalu klik ikon **Real-Time Preview** (ikon bola dunia di pojok kanan bawah Dreamweaver) untuk mengujinya langsung di Google Chrome.
+
+---
+
+### Tahap 3: Publikasi Online dengan GitHub Pages
+
+Setelah website berjalan normal di komputer Anda, publikasikan agar panitia wisuda bisa mengaksesnya secara bersamaan dari berbagai perangkat (laptop maupun HP):
+
+* **Buat Repositori Baru:** Buka akun GitHub Anda, klik **New Repository**, dan beri nama (misalnya `absensi-wisuda-ubr`). Pastikan statusnya diatur ke **Public**.
+* **Unggah File:** Klik **Add file > Upload files**, seret file **`index.html`** dari folder proyek Dreamweaver Anda ke halaman GitHub, lalu klik **Commit changes**.
+* **Aktifkan Domain Online:** Masuk ke tab **Settings** di dalam repositori tersebut, pilih menu **Pages** di bilah kiri, lalu pada bagian *Branch*, ubah dari `None` menjadi **`main`** dan klik **Save**.
+* **Akses Website:** Tunggu sekitar 1 hingga 2 menit, lalu segarkan (*refresh*) halaman tersebut. Alamat website online Anda (misalnya `https://github.io`) akan muncul di bagian atas dan siap digunakan oleh seluruh panitia seksi tamu.
+
+<FollowUp>
+Apakah Anda ingin sistem ini ditambahkan fitur **scan QR Code langsung menggunakan kamera HP/webcam** untuk kolom *Check-In*, atau fitur **ekspor daftar kehadiran ke file Excel (.csv)** untuk laporan akhir panitia?
+</FollowUp>
+		
