@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistem Absensi Undangan Wisuda</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root { --primary:#0B2347; --accent:#D4AF37; --bg:#F4F7FA; --card:#FFFFFF; --text:#1E293B; --success:#16A34A; }
+* { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+body { background:var(--bg); color:var(--text); line-height:1.6; }
+header { background:linear-gradient(135deg,var(--primary) 0%,#163A70 100%); color:#fff; padding:35px 20px; text-align:center; border-bottom:4px solid var(--accent); }
+header h1 { font-size:26px; letter-spacing:1px; margin-bottom:5px; }
+header p { font-size:14px; color:#CBD5E1; }
+.container { max-width:1000px; margin:-25px auto 40px; padding:0 20px; }
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin-bottom:25px; }
+.stat-card { background:var(--card); padding:20px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.06); text-align:center; border-top:3px solid var(--primary); }
+.stat-card h3 { font-size:28px; color:var(--primary); margin-bottom:4px; }
+.stat-card span { font-size:13px; color:#64748B; font-weight:600; text-transform:uppercase; }
+.checkin-box { background:var(--card); padding:25px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.06); margin-bottom:25px; }
+.checkin-box h2 { font-size:18px; color:var(--primary); margin-bottom:15px; }
+.form-group { display:flex; gap:10px; flex-wrap:wrap; }
+input[type="text"], select { flex:1; min-width:200px; padding:12px 15px; border:1px solid #CBD5E1; border-radius:6px; font-size:15px; }
+button { background:var(--primary); color:#fff; border:none; padding:12px 24px; border-radius:6px; font-size:15px; font-weight:600; cursor:pointer; transition:.2s; }
+button:hover { background:#163A70; }
+.btn-gold { background:var(--accent); color:#0B2347; }
+.btn-gold:hover { background:#B8962E; }
+.table-box { background:var(--card); padding:25px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.06); overflow-x:auto; }
+table { width:100%; border-collapse:collapse; margin-top:15px; }
+th, td { padding:12px 15px; text-align:left; border-bottom:1px solid #E2E8F0; font-size:14px; }
+th { background:#F8FAFC; color:var(--primary); font-weight:700; }
+.badge { padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+.badge-hadir { background:#DCFCE7; color:var(--success); }
+.badge-belum { background:#FEE2E2; color:#DC2626; }
+.btn-sm { padding:6px 12px; font-size:12px; }
+#alert-msg { margin-top:12px; font-size:14px; font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>ABSENSI UNDANGAN WISUDA</h1>
+    <p>Sistem Registrasi Kehadiran Tamu &amp; Wisudawan</p>
+</header>
+
+<div class="container">
+    <div class="stats-grid">
+        <div class="stat-card"><h3 id="total-undangan">0</h3><span>Total Undangan</span></div>
+        <div class="stat-card" style="border-top-color:#16A34A;"><h3 id="total-hadir" style="color:#16A34A;">0</h3><span>Sudah Hadir</span></div>
+        <div class="stat-card" style="border-top-color:#DC2626;"><h3 id="total-belum" style="color:#DC2626;">0</h3><span>Belum Hadir</span></div>
+    </div>
+
+    <div class="checkin-box">
+        <h2>Registrasi Kehadiran (Check-In)</h2>
+        <div class="form-group">
+            <input type="text" id="input-kode" placeholder="Ketik / Scan Kode Undangan (Misal: WSD-001)...">
+            <button onclick="prosesCheckIn()">Konfirmasi Hadir</button>
+        </div>
+        <div id="alert-msg"></div>
+    </div>
+
+    <div class="checkin-box">
+        <h2>Tambah Data Undangan Baru</h2>
+        <div class="form-group">
+            <input type="text" id="new-kode" placeholder="Kode Unik (Misal: WSD-005)">
+            <input type="text" id="new-nama" placeholder="Nama Lengkap Tamu / Wisudawan">
+            <select id="new-kategori">
+                <option value="Wisudawan">Wisudawan</option>
+                <option value="Orang Tua / Wali">Orang Tua / Wali</option>
+                <option value="Tamu Undangan / VIP">Tamu Undangan / VIP</option>
+            </select>
+            <button class="btn-gold" onclick="tambahUndangan()">+ Simpan Undangan</button>
+        </div>
+    </div>
+
+    <div class="table-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <h2 style="font-size:18px; color:var(--primary);">Daftar Tamu &amp; Status Kehadiran</h2>
+            <input type="text" id="cari-tamu" onkeyup="filterTabel()" placeholder="Cari nama atau kode..." style="max-width:250px; padding:8px 12px;">
+        </div>
+        <table id="tabel-tamu">
+            <thead>
+                <tr><th>Kode</th><th>Nama Lengkap</th><th>Kategori</th><th>Status</th><th>Waktu Hadir</th><th>Aksi</th></tr>
+            </thead>
+            <tbody id="tbody-tamu">
+                <tr><td colspan="6" style="text-align:center;">Memuat data dari Supabase...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://rhcrlvwwheqlhvxegrnj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_BNgPxaQmzdUh1VYjxJoDEg_4x7gtdQA';
+const TABEL = 'absensi_wisuda';
+
+if (!window.supabase) {
+    document.getElementById('tbody-tamu').innerHTML =
+        '<tr><td colspan="6" style="color:red; text-align:center;">Library Supabase gagal dimuat. Periksa koneksi internet.</td></tr>';
+}
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Mencegah teks dari database dibaca sebagai kode HTML
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+}
+
+function tampilPesan(teks, warna) {
+    const box = document.getElementById('alert-msg');
+    box.style.color = warna;
+    box.textContent = teks;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    muatData();
+
+    // Tombol Enter (juga dikirim otomatis oleh scanner barcode)
+    document.getElementById('input-kode').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') prosesCheckIn();
+    });
+
+    // Tombol Check-In di dalam tabel
+    document.getElementById('tbody-tamu').addEventListener('click', function (e) {
+        const kode = e.target.dataset ? e.target.dataset.kode : null;
+        if (kode) tandaiHadir(kode);
+    });
+});
+
+async function muatData() {
+    const { data, error } = await db.from(TABEL).select('*').order('id', { ascending: true });
+
+    if (error) {
+        console.error(error);
+        document.getElementById('tbody-tamu').innerHTML =
+            '<tr><td colspan="6" style="color:red; text-align:center;">Gagal memuat data: ' + esc(error.message) + '</td></tr>';
+        return;
+    }
+    renderTabel(data);
+    updateStatistik(data);
+}
+
+function renderTabel(data) {
+    const tbody = document.getElementById('tbody-tamu');
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data undangan. Silakan tambahkan di atas.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(function (item) {
+        const statusBadge = item.status_hadir
+            ? '<span class="badge badge-hadir">Hadir</span>'
+            : '<span class="badge badge-belum">Belum Hadir</span>';
+
+        const waktu = item.waktu_hadir
+            ? new Date(item.waktu_hadir).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Jakarta' }) + ' WIB'
+            : '-';
+
+        const tombolAksi = !item.status_hadir
+            ? '<button class="btn-sm" data-kode="' + esc(item.kode_undangan) + '">Check-In</button>'
+            : '<span style="color:#16A34A; font-size:12px;">✔ Terverifikasi</span>';
+
+        return '<tr>' +
+            '<td><strong>' + esc(item.kode_undangan) + '</strong></td>' +
+            '<td>' + esc(item.nama_lengkap) + '</td>' +
+            '<td>' + esc(item.kategori) + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td>' + waktu + '</td>' +
+            '<td>' + tombolAksi + '</td>' +
+        '</tr>';
+    }).join('');
+
+    filterTabel();
+}
+
+function updateStatistik(data) {
+    const total = data.length;
+    const hadir = data.filter(function (i) { return i.status_hadir; }).length;
+    document.getElementById('total-undangan').innerText = total;
+    document.getElementById('total-hadir').innerText = hadir;
+    document.getElementById('total-belum').innerText = total - hadir;
+}
+
+async function prosesCheckIn() {
+    const input = document.getElementById('input-kode');
+    const kode = input.value.trim().toUpperCase();
+
+    if (!kode) {
+        tampilPesan('Silakan masukkan kode undangan terlebih dahulu!', '#DC2626');
+        return;
+    }
+    await tandaiHadir(kode);
+    input.value = '';
+    input.focus();
+}
+
+async function tandaiHadir(kode) {
+    const { data: cekData, error: errCek } = await db
+        .from(TABEL).select('*').eq('kode_undangan', kode).maybeSingle();
+
+    if (errCek) {
+        tampilPesan('Gagal memeriksa kode: ' + errCek.message, '#DC2626');
+        return;
+    }
+    if (!cekData) {
+        tampilPesan('Kode "' + kode + '" tidak ditemukan dalam daftar undangan!', '#DC2626');
+        return;
+    }
+    if (cekData.status_hadir) {
+        tampilPesan('Tamu atas nama ' + cekData.nama_lengkap + ' (' + kode + ') sudah tercatat hadir sebelumnya.', '#D97706');
+        return;
+    }
+
+    const { data: hasil, error } = await db
+        .from(TABEL)
+        .update({ status_hadir: true, waktu_hadir: new Date().toISOString() })
+        .eq('kode_undangan', kode)
+        .eq('status_hadir', false)
+        .select();
+
+    if (error) {
+        tampilPesan('Gagal mencatat kehadiran: ' + error.message, '#DC2626');
+        return;
+    }
+    if (!hasil || hasil.length === 0) {
+        tampilPesan('Data tidak berubah. Periksa policy UPDATE (RLS) di Supabase.', '#DC2626');
+        return;
+    }
+
+    tampilPesan('Berhasil! Selamat datang, ' + cekData.nama_lengkap + ' (' + cekData.kategori + ').', '#16A34A');
+    muatData();
+}
+
+async function tambahUndangan() {
+    const kode = document.getElementById('new-kode').value.trim().toUpperCase();
+    const nama = document.getElementById('new-nama').value.trim();
+    const kategori = document.getElementById('new-kategori').value;
+
+    if (!kode || !nama) {
+        alert('Kode Undangan dan Nama Lengkap wajib diisi!');
+        return;
+    }
+
+    const { error } = await db
+        .from(TABEL)
+        .insert([{ kode_undangan: kode, nama_lengkap: nama, kategori: kategori, status_hadir: false }]);
+
+    if (error) {
+        alert('Gagal menyimpan: ' + error.message);
+    } else {
+        document.getElementById('new-kode').value = '';
+        document.getElementById('new-nama').value = '';
+        muatData();
+    }
+}
+
+function filterTabel() {
+    const keyword = document.getElementById('cari-tamu').value.toLowerCase();
+    document.querySelectorAll('#tbody-tamu tr').forEach(function (tr) {
+        tr.style.display = tr.innerText.toLowerCase().includes(keyword) ? '' : 'none';
+    });
+}
+</script>
+</body>
+</html>
